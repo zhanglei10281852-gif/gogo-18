@@ -1,0 +1,6 @@
+Python is a popular programming language for machine learning and data science.
+Python has many libraries like numpy, pandas, scikit-learn, and TensorFlow.
+Machine learning in Python is easy to get started with.
+Rust is a systems programming language focused on safety and performance.
+Rust has zero-cost abstractions and guarantees memory safety without garbage collection.
+Go is another language great for building CLI tools and web services.
