@@ -1,6 +1,7 @@
 package query
 
 import (
+	"fmt"
 	"strings"
 	"unicode"
 
@@ -17,7 +18,20 @@ func NewParser(input string) *Parser {
 }
 
 func (p *Parser) Parse() (types.QueryNode, error) {
-	return p.parseOr()
+	p.skipWhitespace()
+	if p.pos >= len(p.input) {
+		return nil, p.parseError("expected expression")
+	}
+
+	node, err := p.parseOr()
+	if err != nil {
+		return nil, err
+	}
+	p.skipWhitespace()
+	if p.pos != len(p.input) {
+		return nil, p.parseError("unexpected trailing token %q", p.input[p.pos])
+	}
+	return node, nil
 }
 
 func (p *Parser) parseOr() (types.QueryNode, error) {
@@ -27,7 +41,7 @@ func (p *Parser) parseOr() (types.QueryNode, error) {
 	}
 	for {
 		p.skipWhitespace()
-		if p.matchKeyword("OR") || p.matchKeyword("or") || p.matchKeyword("|") {
+		if p.matchOrOperator() {
 			right, err := p.parseAnd()
 			if err != nil {
 				return nil, err
@@ -51,8 +65,7 @@ func (p *Parser) parseAnd() (types.QueryNode, error) {
 	}
 	for {
 		p.skipWhitespace()
-		explicitAnd := p.matchKeyword("AND") || p.matchKeyword("and") || p.matchKeyword("&&")
-		if explicitAnd {
+		if p.matchAndOperator() {
 			right, err := p.parseNot()
 			if err != nil {
 				return nil, err
@@ -60,24 +73,13 @@ func (p *Parser) parseAnd() (types.QueryNode, error) {
 			left = combineAnd(left, right)
 			continue
 		}
-		if p.pos >= len(p.input) {
+		if p.pos >= len(p.input) || p.input[p.pos] == ')' || p.atOrOperator() {
 			break
 		}
-		ch := p.input[p.pos]
-		if ch == ')' {
-			break
-		}
-		if ch == 'O' || ch == 'o' {
-			if p.lookAheadKeyword("OR") || p.lookAheadKeyword("or") {
-				break
-			}
-		}
+
 		right, err := p.parseNot()
 		if err != nil {
 			return nil, err
-		}
-		if right == nil {
-			break
 		}
 		left = combineAnd(left, right)
 	}
@@ -106,34 +108,47 @@ func (p *Parser) parseNot() (types.QueryNode, error) {
 
 func (p *Parser) parsePrimary() (types.QueryNode, error) {
 	p.skipWhitespace()
+	if p.pos >= len(p.input) {
+		return nil, p.parseError("expected expression")
+	}
+	if p.input[p.pos] == ')' {
+		return nil, p.parseError("expected expression before ')'")
+	}
+	if p.atBinaryOperator() {
+		return nil, p.parseError("expected expression, found operator")
+	}
+
 	if p.matchString("(") {
+		openingPos := p.pos - 1
 		node, err := p.parseOr()
 		if err != nil {
 			return nil, err
 		}
 		p.skipWhitespace()
-		p.matchString(")")
+		if !p.matchString(")") {
+			return nil, p.parseError("expected ')' to close '(' at position %d", openingPos)
+		}
 		return node, nil
 	}
-	if p.pos < len(p.input) && p.input[p.pos] == '"' {
+	if p.input[p.pos] == '"' {
 		return p.parsePhrase()
 	}
 	return p.parseTerm()
 }
 
 func (p *Parser) parsePhrase() (types.QueryNode, error) {
+	openingPos := p.pos
 	p.pos++
 	var sb strings.Builder
 	for p.pos < len(p.input) && p.input[p.pos] != '"' {
 		sb.WriteRune(p.input[p.pos])
 		p.pos++
 	}
-	if p.pos < len(p.input) {
-		p.pos++
+	if p.pos >= len(p.input) {
+		return nil, p.parseError("unterminated phrase starting at position %d", openingPos)
 	}
-	phrase := sb.String()
-	terms := splitPhrase(phrase)
-	return &types.PhraseQuery{Terms: terms}, nil
+	p.pos++
+	return &types.PhraseQuery{Terms: splitPhrase(sb.String())}, nil
 }
 
 func splitPhrase(s string) []string {
@@ -167,7 +182,7 @@ func (p *Parser) parseTerm() (types.QueryNode, error) {
 	}
 	term := strings.ToLower(sb.String())
 	if term == "" {
-		return nil, nil
+		return nil, p.parseError("expected term")
 	}
 	if strings.HasSuffix(term, "*") {
 		return &types.PrefixQuery{Prefix: term[:len(term)-1]}, nil
@@ -181,7 +196,33 @@ func (p *Parser) skipWhitespace() {
 	}
 }
 
+func (p *Parser) matchAndOperator() bool {
+	return p.matchKeyword("AND") || p.matchKeyword("and") || p.matchString("&&")
+}
+
+func (p *Parser) matchOrOperator() bool {
+	return p.matchKeyword("OR") || p.matchKeyword("or") || p.matchString("|")
+}
+
+func (p *Parser) atBinaryOperator() bool {
+	return p.lookAheadKeyword("AND") || p.lookAheadKeyword("and") ||
+		p.lookAheadKeyword("OR") || p.lookAheadKeyword("or") ||
+		p.lookAheadString("&&") || p.lookAheadString("|")
+}
+
+func (p *Parser) atOrOperator() bool {
+	return p.lookAheadKeyword("OR") || p.lookAheadKeyword("or") || p.lookAheadString("|")
+}
+
 func (p *Parser) matchString(s string) bool {
+	if !p.lookAheadString(s) {
+		return false
+	}
+	p.pos += len([]rune(s))
+	return true
+}
+
+func (p *Parser) lookAheadString(s string) bool {
 	runes := []rune(s)
 	if p.pos+len(runes) > len(p.input) {
 		return false
@@ -191,30 +232,14 @@ func (p *Parser) matchString(s string) bool {
 			return false
 		}
 	}
-	p.pos += len(runes)
 	return true
 }
 
 func (p *Parser) matchKeyword(s string) bool {
-	runes := []rune(s)
-	savePos := p.pos
-	if p.pos+len(runes) > len(p.input) {
+	if !p.lookAheadKeyword(s) {
 		return false
 	}
-	for i, r := range runes {
-		if p.input[p.pos+i] != r {
-			return false
-		}
-	}
-	nextPos := p.pos + len(runes)
-	if nextPos < len(p.input) {
-		next := p.input[nextPos]
-		if unicode.IsLetter(next) || unicode.IsDigit(next) {
-			return false
-		}
-	}
-	p.pos = nextPos
-	_ = savePos
+	p.pos += len([]rune(s))
 	return true
 }
 
@@ -233,5 +258,9 @@ func (p *Parser) lookAheadKeyword(s string) bool {
 		return true
 	}
 	next := p.input[nextPos]
-	return !(unicode.IsLetter(next) || unicode.IsDigit(next))
+	return !(unicode.IsLetter(next) || unicode.IsDigit(next) || next == '_')
+}
+
+func (p *Parser) parseError(format string, args ...any) error {
+	return fmt.Errorf("parse error at position %d: %s", p.pos, fmt.Sprintf(format, args...))
 }
