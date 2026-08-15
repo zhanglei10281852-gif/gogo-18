@@ -1,0 +1,51 @@
+Go result repository container validation
+task_id: 18
+task_type: bugfix
+platform: linux/amd64
+image: gomark-task-18-amd64:eb93a61a54fb
+started_at: 2026-08-15T02:02:05.632Z
+finished_at: 2026-08-15T02:02:29.400Z
+status: pass
+
+===== command 1 =====
+phase: health_run
+$ docker run --rm --network none --platform linux/amd64 -e GOTOOLCHAIN=local -e GOPROXY=off -e GOSUMDB=off gomark-task-18-amd64:eb93a61a54fb bash -c set -euo pipefail
+cd '/app'
+package_name="$(GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go list -f '{{.Name}}' . 2>/dev/null || true)"
+if [ "$package_name" = "main" ]; then
+  echo "$ go run ."
+  rm -f '/tmp/gomark-go-run-0.log'
+  GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go run . >'/tmp/gomark-go-run-0.log' 2>&1 &
+  run_pid=$!
+  sleep 5
+  if kill -0 "$run_pid" 2>/dev/null; then
+    cat '/tmp/gomark-go-run-0.log'
+    kill -TERM "$run_pid" 2>/dev/null || true
+    wait "$run_pid" 2>/dev/null || true
+    echo "go run . started successfully and stayed running for 5 seconds"
+  else
+    set +e
+    wait "$run_pid"
+    run_status=$?
+    set -e
+    cat '/tmp/gomark-go-run-0.log'
+    if [ "$run_status" -ne 0 ]; then
+      if grep -q '^Usage of ' '/tmp/gomark-go-run-0.log' && grep -q '^exit status 2$' '/tmp/gomark-go-run-0.log'; then
+        echo "go run . reached standard CLI usage because required arguments were omitted"
+      else
+        exit "$run_status"
+      fi
+    else
+      echo "go run . completed successfully"
+    fi
+  fi
+else
+  echo "module . is not a runnable root main package; go run skipped"
+fi
+cwd: E:\gomark\tmp\task-package-18-230b3c78-9954-4569-b94e-f60af7c2c19e\source
+actual_exit: 0
+--- stdout ---
+module . is not a runnable root main package; go run skipped
+
+--- stderr ---
+

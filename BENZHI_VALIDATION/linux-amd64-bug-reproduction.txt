@@ -1,0 +1,66 @@
+Go result repository container validation
+task_id: 18
+task_type: bugfix
+platform: linux/amd64
+image: gomark-task-18-amd64-parent:eb93a61a54fb
+started_at: 2026-08-15T02:02:05.632Z
+finished_at: 2026-08-15T02:02:29.400Z
+status: pass
+verification_1: expected_exit=1; actual_exit=1; matched=true; command=go test ./internal/query -run "^TestParserParse" -count=1 -v
+
+===== command 1 =====
+phase: bug_reproduction
+$ docker run --rm --network none --platform linux/amd64 --mount type=bind,source=E:\gomark\tmp\task-package-18-230b3c78-9954-4569-b94e-f60af7c2c19e\trusted-test.patch,target=/tmp/gomark-trusted-test.patch,readonly -e GOTOOLCHAIN=local -e GOPROXY=off -e GOSUMDB=off gomark-task-18-amd64-parent:eb93a61a54fb bash -c set -o pipefail
+git apply --check /tmp/gomark-trusted-test.patch >/dev/null || exit 97
+git apply /tmp/gomark-trusted-test.patch >/dev/null || exit 98
+cd '/app'
+echo "$ go test ./internal/query -run \"^TestParserParse\" -count=1 -v"
+go test ./internal/query -run "^TestParserParse" -count=1 -v
+cwd: E:\gomark\tmp\task-package-18-230b3c78-9954-4569-b94e-f60af7c2c19e\parent-source
+actual_exit: 1
+--- stdout ---
+$ go test ./internal/query -run "^TestParserParse" -count=1 -v
+=== RUN   TestParserParseRejectsMalformedQueries
+=== RUN   TestParserParseRejectsMalformedQueries/unterminated_phrase
+    parser_parse_test.go:37: Parser.Parse("\"alpha beta") returned no error
+=== RUN   TestParserParseRejectsMalformedQueries/unterminated_group
+    parser_parse_test.go:37: Parser.Parse("alpha AND (beta OR gamma") returned no error
+=== RUN   TestParserParseRejectsMalformedQueries/trailing_AND
+    parser_parse_test.go:37: Parser.Parse("alpha AND") returned no error
+=== RUN   TestParserParseRejectsMalformedQueries/trailing_OR
+    parser_parse_test.go:37: Parser.Parse("alpha OR") returned no error
+=== RUN   TestParserParseRejectsMalformedQueries/trailing_NOT
+    parser_parse_test.go:37: Parser.Parse("alpha NOT") returned no error
+=== RUN   TestParserParseRejectsMalformedQueries/lone_NOT
+    parser_parse_test.go:37: Parser.Parse("NOT") returned no error
+=== RUN   TestParserParseRejectsMalformedQueries/empty_group
+    parser_parse_test.go:37: Parser.Parse("()") returned no error
+=== RUN   TestParserParseRejectsMalformedQueries/whitespace-only_group
+    parser_parse_test.go:37: Parser.Parse("(   )") returned no error
+=== RUN   TestParserParseRejectsMalformedQueries/extra_closing_parenthesis
+    parser_parse_test.go:37: Parser.Parse("alpha)") returned no error
+=== RUN   TestParserParseRejectsMalformedQueries/garbage_after_query
+    parser_parse_test.go:37: Parser.Parse("(alpha)) garbage") returned no error
+--- FAIL: TestParserParseRejectsMalformedQueries (0.00s)
+    --- FAIL: TestParserParseRejectsMalformedQueries/unterminated_phrase (0.00s)
+    --- FAIL: TestParserParseRejectsMalformedQueries/unterminated_group (0.00s)
+    --- FAIL: TestParserParseRejectsMalformedQueries/trailing_AND (0.00s)
+    --- FAIL: TestParserParseRejectsMalformedQueries/trailing_OR (0.00s)
+    --- FAIL: TestParserParseRejectsMalformedQueries/trailing_NOT (0.00s)
+    --- FAIL: TestParserParseRejectsMalformedQueries/lone_NOT (0.00s)
+    --- FAIL: TestParserParseRejectsMalformedQueries/empty_group (0.00s)
+    --- FAIL: TestParserParseRejectsMalformedQueries/whitespace-only_group (0.00s)
+    --- FAIL: TestParserParseRejectsMalformedQueries/extra_closing_parenthesis (0.00s)
+    --- FAIL: TestParserParseRejectsMalformedQueries/garbage_after_query (0.00s)
+=== RUN   TestParserParseValidSyntaxRegression
+=== RUN   TestParserParseValidSyntaxRegression/nested_boolean_expression
+=== RUN   TestParserParseValidSyntaxRegression/implicit_AND_with_phrase_and_prefix
+--- PASS: TestParserParseValidSyntaxRegression (0.00s)
+    --- PASS: TestParserParseValidSyntaxRegression/nested_boolean_expression (0.00s)
+    --- PASS: TestParserParseValidSyntaxRegression/implicit_AND_with_phrase_and_prefix (0.00s)
+FAIL
+FAIL	github.com/localsearch/cli/internal/query	0.002s
+FAIL
+
+--- stderr ---
+
